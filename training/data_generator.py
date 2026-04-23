@@ -152,6 +152,26 @@ def split_train_valid(records: list[dict[str, Any]], valid_ratio: float) -> tupl
     return train, valid
 
 
+def build_from_corpus(
+    corpus_path: Path,
+    num_samples: int,
+    min_chars: int,
+    max_chars: int,
+    seed: int,
+) -> list[dict[str, Any]]:
+    rng = random.Random(seed)
+    lines = read_non_empty_lines(corpus_path)
+    lines = [l for l in lines if min_chars <= len(l) <= max_chars]
+    print(f"Corpus: {len(lines)} eligible lines (from {corpus_path})")
+
+    if num_samples <= 0 or num_samples >= len(lines):
+        sampled = rng.sample(lines, len(lines)) if num_samples < len(lines) else lines
+    else:
+        sampled = rng.sample(lines, num_samples)
+
+    return [_make_record(i, sentence) for i, sentence in enumerate(sampled)]
+
+
 def parse_args() -> argparse.Namespace:
     defaults = _default_paths()
     parser = argparse.ArgumentParser(description="Generate Sarkaz parallel data.")
@@ -161,6 +181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-jsonl", type=Path, default=defaults["train_jsonl"])
     parser.add_argument("--valid-jsonl", type=Path, default=defaults["valid_jsonl"])
     parser.add_argument("--tokenizer-mix", type=Path, default=defaults["tokenizer_mix"])
+    parser.add_argument("--corpus", type=Path, default="")
     parser.add_argument("--num-samples", type=int, default=5000)
     parser.add_argument("--valid-ratio", type=float, default=0.02)
     parser.add_argument("--min-words", type=int, default=2)
@@ -174,18 +195,29 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    records = build_dataset(
-        num_samples=args.num_samples,
-        min_words=args.min_words,
-        max_words=args.max_words,
-        min_chars=args.min_chars,
-        max_chars=args.max_chars,
-        endfield_ratio=args.endfield_ratio,
-        seed=args.seed,
-        wordlist_path=args.wordlist,
-        single_char_path=args.single_char,
-        endfield_words_path=args.endfield_words,
-    )
+
+    if args.corpus:
+        records = build_from_corpus(
+            corpus_path=args.corpus,
+            num_samples=args.num_samples,
+            min_chars=args.min_chars,
+            max_chars=args.max_chars,
+            seed=args.seed,
+        )
+    else:
+        records = build_dataset(
+            num_samples=args.num_samples,
+            min_words=args.min_words,
+            max_words=args.max_words,
+            min_chars=args.min_chars,
+            max_chars=args.max_chars,
+            endfield_ratio=args.endfield_ratio,
+            seed=args.seed,
+            wordlist_path=args.wordlist,
+            single_char_path=args.single_char,
+            endfield_words_path=args.endfield_words,
+        )
+
     train_records, valid_records = split_train_valid(records, args.valid_ratio)
 
     write_jsonl(args.train_jsonl, train_records)
