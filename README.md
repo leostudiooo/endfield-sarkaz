@@ -90,3 +90,9 @@ bash scripts/local_qwen3_verify.sh
 ```bash
 HF_ENDPOINT=https://hf-mirror.com uv run skz-train-base --model-name sshleifer/tiny-gpt2 --max-steps 20
 ```
+
+## 致谢
+
+- https://github.com/ZhangHB-321688/sarkaz_tools 给出了中文字符到萨卡兹密文的映射规律和 MCP 解密工具
+- https://github.com/Kengxxiao/ArknightsGameData 提供了《明日方舟》本体原始解包数据
+- https://github.com/050644zf/ASTR-Script/ 提供了从解包数据中提取剧情文本的工具，方便构建优质平行语料
