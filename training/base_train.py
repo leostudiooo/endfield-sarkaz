@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--num-train-epochs", type=float, default=1.0)
     parser.add_argument("--max-steps", type=int, default=80)
-    parser.add_argument("--warmup-ratio", type=float, default=0.1)
+    parser.add_argument("--warmup-steps", type=int, default=10)
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--save-steps", type=int, default=80)
     parser.add_argument("--seed", type=int, default=42)
@@ -74,8 +74,16 @@ def _prepare_dataset(
 ) -> Dataset:
     def preprocess(example: dict[str, Any]) -> dict[str, Any]:
         text = _format_example(example)
-        tokenized = tokenizer(text, truncation=True, max_length=max_length)
-        tokenized["labels"] = list(tokenized["input_ids"])
+        tokenized = tokenizer(
+            text,
+            truncation=True,
+            max_length=max_length,
+            padding="max_length",
+        )
+        tokenized["labels"] = [
+            tid if tid != tokenizer.pad_token_id else -100
+            for tid in tokenized["input_ids"]
+        ]
         return tokenized
 
     columns = dataset.column_names
@@ -178,23 +186,23 @@ def main() -> None:
 
     training_args = TrainingArguments(
         output_dir=str(args.output_dir),
-        overwrite_output_dir=True,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.per_device_train_batch_size,
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         num_train_epochs=args.num_train_epochs,
         max_steps=args.max_steps,
-        warmup_ratio=args.warmup_ratio,
+        warmup_steps=args.warmup_steps,
         logging_steps=args.logging_steps,
         save_steps=args.save_steps,
         save_total_limit=2,
         report_to="none",
-        evaluation_strategy="steps" if eval_dataset is not None else "no",
+        eval_strategy="steps" if eval_dataset is not None else "no",
         eval_steps=args.logging_steps if eval_dataset is not None else None,
         bf16=use_bf16,
         fp16=use_fp16,
         dataloader_num_workers=0,
+        dataloader_pin_memory=False,
     )
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
