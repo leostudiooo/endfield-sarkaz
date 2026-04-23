@@ -13,9 +13,11 @@ while True:
 ```
 
 本 repo 想要达到的目标是：
-- [x] 收集和合成更多的《明日方舟》/《明日方舟：终末地》中文语料
-- [x] 将这些语料清洗并转换为萨卡兹语平行语料
-- [ ] 微调一个 Qwen 小模型的 tokenizer 和模型本身，使其能够直接处理萨卡兹语，以便直接翻译为中文
+- [x] 收集和清洗《明日方舟》中文语料
+- [x] 将语料转换为萨卡兹语平行数据集
+- [x] 本地微调 Qwen3-0.6B smoke test，验证训练流程
+- [ ] 微调 Qwen3-4B 模型的 tokenizer 与模型，实现端到端萨卡兹语→中文翻译
+- [ ] 收集《明日方舟：终末地》语料，训练领域 LoRA
 
 为什么考虑微调小模型：从 Unicode 直接映射到 26 个字母会丢失几乎所有语义和语法信息。因此，需要首先调整 tokenizer，将连续的一大段文本先拆分为 token。举一个转换的例子（逐字对应，没有任何空格）：
 ```
@@ -42,7 +44,8 @@ ytqqrvqbsbtjyrernx
    c) 合并：投影 token + SPM token + endfield_words 硬编码 → 注入 Qwen3 词表
 
 4. 模型训练
-   Qwen3-0.6B + 扩展词表 → LoRA SFT → 端到端萨卡兹语翻译模型
+   Qwen3-0.6B + 扩展词表 → LoRA SFT → 验证流程
+   Qwen3-4B + 扩展词表 → LoRA SFT → 端到端翻译模型（目标）
 ```
 
 ## 使用 uv 启动本地实验
@@ -70,11 +73,11 @@ export HF_ENDPOINT=https://hf-mirror.com
 # 清洗明日方舟剧情语料
 uv run python scripts/clean_corpus.py
 
-# 用真实句子生成平行语料（默认 5000 条）
+# 用真实句子生成平行语料（默认 5000 条，可加大到 50000）
 uv run skz-generate-data --corpus corpus/raw/ak/arknights_cleaned.txt
 
-# 或从 wordlist 随机合成（旧方案）
-uv run skz-generate-data --num-samples 2000 --valid-ratio 0.05
+# 或从 wordlist 随机合成
+uv run skz-generate-data --num-samples 5000
 ```
 
 输出文件：
@@ -92,42 +95,31 @@ uv run skz-train-tokenizer
 uv run skz-merge-tokenizer --init-embeddings
 ```
 
-### 4) 微调模型
+### 4) 本地验证（0.6B smoke test）
 
 ```bash
 HF_ENDPOINT=https://hf-mirror.com uv run skz-train-base \
     --model-name Qwen/Qwen3-0.6B \
     --tokenizer-path models/tokenizer/merged \
-    --max-train-samples 2000 \
-    --max-valid-samples 128 \
-    --max-steps 40
+    --max-train-samples 4900 \
+    --max-steps 80
 ```
 
-默认输出目录：`models/base_model/qwen3_0_6b_verify/`
+### 5) 云端正式训练（4B，目标）
 
-### 5) 构建 Aho-Corasick 词典并做一次解码
+需要在云端 GPU 上运行，数据规模需要扩大到 10 万-50 万条。
+
+### 6) 构建 Aho-Corasick 词典并做一次解码
 
 ```bash
 uv run skz-build-trie
 uv run skz-decode --text ytqqrvqbsbtjyrernx
 ```
 
-### 6) 一键执行以上流程
-
-```bash
-bash scripts/local_tiny_verify.sh
-```
-
-或使用 Qwen3 专用入口：
+### 7) 一键执行验证流程
 
 ```bash
 bash scripts/local_qwen3_verify.sh
-```
-
-如果要先做极速连通性验证（仅 smoke test，不代表效果），可替换为：
-
-```bash
-HF_ENDPOINT=https://hf-mirror.com uv run skz-train-base --model-name sshleifer/tiny-gpt2 --max-steps 20
 ```
 
 ## 致谢
