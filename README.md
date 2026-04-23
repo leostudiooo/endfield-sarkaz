@@ -23,3 +23,70 @@ while True:
 ytqqrvqbsbtjyrernx
 ```
 在这个例子中，原始文本被转换为萨卡兹语后，完全失去了可读性和结构。通过微调 tokenizer，我们可以将连续的字符序列拆分成更小的 token，这些 token 可以捕捉到一些语义信息，从而使模型能够更好地理解和处理这些输入。除此之外，还需要利用 LLM 的世界知识来帮助翻译和理解萨卡兹语，因为单纯的字符映射无法提供足够的上下文信息。
+
+## 使用 uv 启动本地实验
+
+### 1) 安装与同步依赖
+
+```bash
+# 如果本机还没有 Python 3.12，可以先安装
+uv python install 3.12
+
+# 创建并同步环境
+uv venv --python 3.12
+uv sync
+```
+
+建议通过 hf-mirror 拉取模型：
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+### 2) 生成平行语料（最小验证）
+
+```bash
+uv run skz-generate-data --num-samples 2000 --valid-ratio 0.05
+```
+
+输出文件：
+- `corpus/skz_parallel/base/train.jsonl`
+- `corpus/skz_parallel/base/valid.jsonl`
+- `corpus/skz_parallel/base/tokenizer_mix.txt`
+
+### 3) 运行超小模型 smoke test
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com uv run skz-train-base \
+	--model-name Qwen/Qwen3-0.6B \
+	--max-train-samples 2000 \
+	--max-valid-samples 128 \
+	--max-steps 40
+```
+
+默认输出目录：`models/base_model/qwen3_0_6b_verify/`
+
+### 4) 构建 Aho-Corasick 词典并做一次解码
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com uv run skz-build-trie
+HF_ENDPOINT=https://hf-mirror.com uv run skz-decode --text ytqqrvqbsbtjyrernx
+```
+
+### 5) 一键执行以上流程
+
+```bash
+bash scripts/local_tiny_verify.sh
+```
+
+或使用 Qwen3 专用入口：
+
+```bash
+bash scripts/local_qwen3_verify.sh
+```
+
+如果要先做极速连通性验证（仅 smoke test，不代表效果），可替换为：
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com uv run skz-train-base --model-name sshleifer/tiny-gpt2 --max-steps 20
+```

@@ -21,7 +21,35 @@
 ```
 .
 ├── README.md                     # 项目根说明文档
+├── corpus/                       # 语料目录
+│   ├── arknights_stories.json    # 明日方舟剧情语料（结构化 JSON）
+│   ├── arknights_stories.txt     # 明日方舟剧情语料（纯文本）
+│   ├── arknights_sentences.txt   # 明日方舟剧情语料（每行一句）
+│   ├── raw/                      # 原始语料（预留）
+│   └── skz_parallel/             # 萨卡兹语平行语料
+├── output/                       # 工具输出目录
+│   ├── xlsx/                     # ASTR-Script 生成的 Excel 文件
+│   └── corpus/                   # 示例语料备份
+├── scripts/                      # 脚本工具
+│   ├── extract_corpus.py         # 从 ArknightsGameData 提取剧情语料
+│   ├── generate_corpus.py        # 生成萨卡兹语平行语料
+│   └── evaluate.py               # 模型评估脚本
+├── training/                     # 模型训练相关
+│   ├── base_train.py             # 基础训练脚本
+│   ├── cloud_train.py            # 云端训练脚本
+│   ├── data_generator.py         # 数据生成器
+│   ├── merge_tokenizer.py        # Tokenizer 合并
+│   └── tokenizer_train.py        # Tokenizer 训练
+├── inference/                    # 推理相关
+│   ├── sarkaz_decoder.py         # 萨卡兹语解码器
+│   └── trie_builder.py           # Trie 树构建
+├── models/                       # 模型目录（预留）
 ├── vendors/
+│   ├── ASTR-Script/              # 明日方舟剧情文本提取工具
+│   │   ├── xlsxconvert.py        # Excel 格式导出
+│   │   ├── jsonconvert.py        # JSON 格式导出
+│   │   └── func.py               # 核心解析函数
+│   ├── ArknightsGameData/        # 明日方舟游戏数据（子模块）
 │   └── sarkaz_tools/             # 第三方/子模块工具集（内含独立 .git 仓库）
 │       ├── README.md
 │       ├── HumanTools/           # 人工使用的 CLI 工具
@@ -30,18 +58,18 @@
 │       │   ├── wordSearcher.py   # 根据萨卡兹字母串反查中文词汇（精确匹配）
 │       │   ├── wordlist.txt      # 汉语常用词表（~56k 行）
 │       │   ├── 对照表.txt         # 按 a-z 分组的手工整字表
-│       │   └── wiki2019zh.json   # 中文维基语料（未在脚本中直接引用）
+│       │   └── wiki2019zh.json   # 仅含字频统计（char→count），非可用的文本语料
 │       └── LLMTools/             # 面向大语言模型的工具
 │           ├── prompt.txt        # LLM 角色设定提示词（Sarkaz Language Decoder）
 │           └── MCPServer/
 │               ├── Sarkaz_tools.py   # MCP Server 主入口（fastmcp）
-│               ├── endfield_words.txt # 终末地专有名词表（~26 行）
+│               ├── endfield_words.txt # 终末地专有名词表（~27 行）
 │               ├── favorite_words.txt # 用户/AI 收藏的词汇（读写）
 │               ├── single_char.txt    # 常用单字表（~3k 行）
 │               └── wordlist.txt       # 汉语常用词表（~56k 行）
 ```
 
-注意：根目录本身**没有** `pyproject.toml`、`requirements.txt`、`setup.py`、`package.json` 等包管理或构建配置文件。
+根目录已包含 `pyproject.toml`（uv 管理），使用 `uv run` 执行脚本。
 
 ---
 
@@ -50,6 +78,7 @@
 - **语言**：Python 3
 - **核心外部依赖**：
   - `fastmcp`（仅 `LLMTools/MCPServer/Sarkaz_tools.py` 使用）
+  - `openpyxl`（仅 `ASTR-Script/xlsxconvert.py` 使用）
 - **无其他运行时依赖**。所有脚本均为可直接运行的 `.py` 文件。
 
 ---
@@ -83,6 +112,34 @@ pip install fastmcp
 python vendors/sarkaz_tools/LLMTools/MCPServer/Sarkaz_tools.py
 ```
 
+### 3. 剧情语料提取（ASTR-Script）
+
+```bash
+# 列出所有活动
+uv run -- python vendors/ASTR-Script/xlsxconvert.py vendors/ArknightsGameData -L zh_CN -E
+
+# 导出所有主线剧情
+uv run -- python vendors/ASTR-Script/xlsxconvert.py vendors/ArknightsGameData -L zh_CN -m
+
+# 导出所有干员密录
+uv run -- python vendors/ASTR-Script/xlsxconvert.py vendors/ArknightsGameData -L zh_CN -r
+
+# 导出特定活动（索引 0）
+uv run -- python vendors/ASTR-Script/xlsxconvert.py vendors/ArknightsGameData -L zh_CN -e 0
+```
+
+### 4. 语料库生成
+
+```bash
+# 从 ArknightsGameData 提取完整语料库（JSON + 纯文本 + 每行一句）
+uv run -- python scripts/extract_corpus.py
+```
+
+生成文件：
+- `corpus/arknights_stories.json` — 结构化 JSON（事件 → 故事层级）
+- `corpus/arknights_stories.txt` — 人类可读的纯文本
+- `corpus/arknights_sentences.txt` — 每行一句，适合 NLP 处理
+
 服务器暴露以下工具（tool）：
 
 | 工具名 | 功能 |
@@ -106,7 +163,7 @@ python vendors/sarkaz_tools/LLMTools/MCPServer/Sarkaz_tools.py
 "gkamztlbdqiyfucxbhsjoprnweygtjmevchdxsanqolkrvwiypjzquhe"[ord(char) % 56]
 ```
 
-即：取字符的 Unicode 码点，对 56 取模，以上述 56 字母字符串为映射表得到对应字母。该规则**一对一**，一个中文字符始终映射为一个萨卡兹字母。
+即：取字符的 Unicode 码点，对 56 取模，以上述 56 字母字符串为映射表得到对应字母。该规则在编码方向是确定性的（一个中文字符始终映射为一个萨卡兹字母），但反向解码时存在大量哈希碰撞（多对一），需依赖上下文消歧。
 
 ---
 
