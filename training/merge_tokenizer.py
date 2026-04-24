@@ -93,22 +93,20 @@ def _collect_projection_tokens(
 
     for line in lines:
         try:
-            input_ids = tokenizer.encode(line, add_special_tokens=False)
+            encoded = tokenizer(line, add_special_tokens=False, return_offsets_mapping=True)
         except Exception:
             continue
 
+        input_ids = encoded["input_ids"]
+        offsets = encoded["offset_mapping"]
         skz_text = convert_chars_to_skz(line)
-        pos = 0
 
-        for token_id in input_ids:
-            raw = tokenizer.decode([token_id])
-            char_len = len(raw)
+        for token_id, (start, end) in zip(input_ids, offsets):
+            char_len = end - start
             if char_len < min_chars:
-                pos += char_len
                 continue
 
-            skz_segment = skz_text[pos : pos + char_len]
-            pos += char_len
+            skz_segment = skz_text[start:end]
 
             if skz_segment and skz_segment not in seen and _is_candidate_token(skz_segment, min_latin_len):
                 seen.add(skz_segment)
